@@ -3,6 +3,7 @@ package lexer
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"testing"
 )
 
@@ -26,7 +27,7 @@ func TestLexer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Cannot serialize test data")
 		}
-		tokens := Lex(string(userJSON))
+		tokens, _ := Lex(string(userJSON))
 
 		expectedResult := []string{
 			"{",
@@ -53,4 +54,24 @@ func TestLexer(t *testing.T) {
 		}
 	})
 
+	t.Run("Lex - read glossary.json", func(t *testing.T) {
+		jsonData, _ := ioutil.ReadFile("testdata/glossary.json")
+		tokens, _ := Lex(string(jsonData))
+
+		if tokens[1] != "value" {
+			t.Errorf("Wrong value on line 1, expected: value, 154 got: %v, %v", tokens[1], tokens[2])
+		}
+
+		if tokens[3] != "glossary" {
+			t.Errorf("Wrong value on line 3, expected: glossary got: %v", tokens[3])
+		}
+
+		if tokens[20] != "Standard Generalized Markup Language" {
+			t.Errorf("Wrong value on line 3, expected: StandardGeneralizedMarkupLanguage Got: %v", tokens[20])
+		}
+	})
+
+	// t.Run("Lex - invalid json", func(t *testing.T) {
+	// 	tokens,_ := Lex("{ aa-234 }")
+	// })
 }

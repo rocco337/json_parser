@@ -7,47 +7,59 @@ import (
 	"github.com/thoas/go-funk"
 )
 
+var jsonSyntax = []string{"{", "[", "}", "]", jsonQuote}
+var ignoreChars = []string{":", ",", "\t", "\b", "\n", "\r", " "}
+var jsonQuote = "\""
+
 //Lex - Parse json and return tokens
 //Find patterns of strings, numbers, booleans, nulls, or JSON syntax like left brackets and left braces,
-func Lex(input string) []interface{} {
-	tokens := lexRecursive(input, 0, "")
-	return tokens
-}
-
-var openChars = []string{"{", "\"", "["}
-var closeChars = []string{"}", "\"", "]"}
-var ignoreChars = []string{":", ","}
-
-func lexRecursive(input string, position int, tempValue string) []interface{} {
+func Lex(input string) ([]interface{}, error) {
 	result := make([]interface{}, 0)
-	if len(input) <= 0 || position > len(input)-1 {
-		return result
+	if len(input) <= 0 {
+		return result, errors.New("Empty input")
 	}
 
-	//more aobut code points on https://blog.golang.org/strings
-	codePoint := string(input[position])
+	tempValue := ""
+	position := 0
+	for position < len(input) {
+		//more aobut code points on https://blog.golang.org/strings
+		codePoint := string(input[position])
 
-	if funk.Contains(ignoreChars, codePoint) {
-		//move on
-	} else if funk.Contains(openChars, codePoint) || funk.Contains(closeChars, codePoint) {
-		if len(tempValue) > 0 {
-			result = append(result, parseValue(tempValue)...)
+		if codePoint == jsonQuote {
+			position++
+			//add everything betwen quotes
+			tempValue, position = readUntilCharacterReached(input, position, func(c string) bool { return string(c) == jsonQuote })
+
+			result = append(result, tempValue)
+			tempValue = ""
+		} else if funk.Contains(jsonSyntax, codePoint) {
+			result = append(result, codePoint)
+		} else if !funk.Contains(ignoreChars, codePoint) {
+			tempValue, position = readUntilCharacterReached(input, position, func(c string) bool { return funk.Contains(jsonSyntax, c) || funk.Contains(ignoreChars, c) })
+
+			result = append(result, parseValue(tempValue))
 			tempValue = ""
 		}
-		if codePoint != "\"" {
-			result = append(result, codePoint)
-		}
-	} else {
-		tempValue += codePoint
+		position++
 	}
 
-	position++
-	result = append(result, lexRecursive(input, position, tempValue)...)
-
-	return result
+	return result, nil
 }
 
-func parseValue(input string) []interface{} {
+func readUntilCharacterReached(input string, position int, isBreakingChar characterReached) (value string, newPosition int) {
+	tempValue := ""
+
+	for !isBreakingChar(string(input[position])) {
+		tempValue += string(input[position])
+		position++
+	}
+
+	return tempValue, position
+}
+
+type characterReached func(char string) bool
+
+func parseValue(input string) interface{} {
 	result := make([]interface{}, 0)
 
 	isNull := isNull(input)
@@ -71,7 +83,7 @@ func parseValue(input string) []interface{} {
 		}
 	}
 
-	return result
+	return result[0]
 }
 
 func parseInt(input string) (uint64, error) {
