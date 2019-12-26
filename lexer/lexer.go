@@ -7,8 +7,8 @@ import (
 	"github.com/thoas/go-funk"
 )
 
-var jsonSyntax = []string{"{", "[", "}", "]", jsonQuote}
-var ignoreChars = []string{":", ",", "\t", "\b", "\n", "\r", " "}
+var jsonSyntax = []string{":", ",", "{", "[", "}", "]"}
+var ignoreChars = []string{"\t", "\b", "\n", "\r", " "}
 var jsonQuote = "\""
 
 //Lex - Parse json and return tokens
@@ -25,22 +25,31 @@ func Lex(input string) ([]interface{}, error) {
 		//more aobut code points on https://blog.golang.org/strings
 		codePoint := string(input[position])
 
+		//its a string, read until end of string
 		if codePoint == jsonQuote {
 			position++
 			//add everything betwen quotes
 			tempValue, position = readUntilCharacterReached(input, position, func(c string) bool { return string(c) == jsonQuote })
-
 			result = append(result, tempValue)
-			tempValue = ""
+
+			//position points on quote character,increase counter to skip it
+			position++
 		} else if funk.Contains(jsonSyntax, codePoint) {
+			//add json syntax character and increase counter
 			result = append(result, codePoint)
-		} else if !funk.Contains(ignoreChars, codePoint) {
+			position++
+		} else if funk.Contains(ignoreChars, codePoint) {
+			position++
+		} else {
 			tempValue, position = readUntilCharacterReached(input, position, func(c string) bool { return funk.Contains(jsonSyntax, c) || funk.Contains(ignoreChars, c) })
 
-			result = append(result, parseValue(tempValue))
-			tempValue = ""
+			parsedValue, err := parseValue(tempValue)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, parsedValue)
+			//position is currently on breaking character, do not increase it, rather let it to trough loop
 		}
-		position++
 	}
 
 	return result, nil
@@ -59,7 +68,7 @@ func readUntilCharacterReached(input string, position int, isBreakingChar charac
 
 type characterReached func(char string) bool
 
-func parseValue(input string) interface{} {
+func parseValue(input string) (interface{}, error) {
 	result := make([]interface{}, 0)
 
 	isNull := isNull(input)
@@ -76,14 +85,14 @@ func parseValue(input string) interface{} {
 				result = append(result, boolValue)
 			} else {
 				//if value couldnt be parsed as any of specific parsers than it is a string
-				result = append(result, input)
+				return nil, errors.New("Cannot parse value: " + input)
 			}
 		} else {
 			result = append(result, intValue)
 		}
 	}
 
-	return result[0]
+	return result[0], nil
 }
 
 func parseInt(input string) (uint64, error) {
