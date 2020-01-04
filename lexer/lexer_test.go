@@ -28,7 +28,6 @@ func TestLexer(t *testing.T) {
 			t.Fatalf("Cannot serialize test data")
 		}
 		tokens, _ := Lex(string(userJSON))
-
 		expectedResult := []string{
 			"{",
 			"Userid", ":", "1", ",",
