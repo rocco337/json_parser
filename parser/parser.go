@@ -27,7 +27,7 @@ func Parse(tokens []interface{}, returnObject interface{}) error {
 	return errors.New("Cannot parse object")
 }
 
-func parseObject(tokens []interface{}, i int, returnObject interface{}) interface{} {
+func parseObject(tokens []interface{}, i int, returnObject interface{}) (index int) {
 	for objectClose != tokens[i] {
 		if tokens[i] == colon {
 			fieldName := tokens[i-1]
@@ -49,7 +49,7 @@ func parseObject(tokens []interface{}, i int, returnObject interface{}) interfac
 		i++
 	}
 
-	return returnObject
+	return i
 }
 
 func parseArray(tokens []interface{}, i int, returnObject interface{}) (index int) {
@@ -58,25 +58,38 @@ func parseArray(tokens []interface{}, i int, returnObject interface{}) (index in
 	for arrayClose != tokens[i] {
 		if tokens[i] == arrayOpen {
 			i++ //skip opening tag
+
+			//todo - fix me
 			parsedArray := make([]int, 0)
 			i = parseArray(tokens, i, &parsedArray)
 			result = append(result, parsedArray)
 		} else if tokens[i] == objectOpen {
 			i++ //skip opening tag
-			parsedObject := parseObject(tokens, i, returnObject)
-			result = append(result, parsedObject)
+
+			//get type of element in slice
+			elemType := reflect.TypeOf(returnObject).Elem().Elem()
+
+			//create pointer of object to fill
+			parsedObject := reflect.New(elemType).Interface()
+			i = parseObject(tokens, i, parsedObject)
+
+			valueFromPointer := reflect.ValueOf(parsedObject).Elem().Interface()
+
+			result = append(result, valueFromPointer)
 		} else {
 			result = append(result, tokens[i])
 		}
 
 		i++
 	}
+
 	setArrayValue(returnObject, result)
 	return i
 }
 
 func setValueByFieldName(targetObject interface{}, targetFieldName string, value interface{}) {
-	fieldName := reflect.ValueOf(targetObject).Elem().FieldByName(targetFieldName)
+	element := reflect.ValueOf(targetObject).Elem()
+	fieldName := element.FieldByName(targetFieldName)
 
 	valueReflected := reflect.ValueOf(value)
 	fieldName.Set(valueReflected)
@@ -85,6 +98,7 @@ func setValueByFieldName(targetObject interface{}, targetFieldName string, value
 func setArrayValue(targetObject interface{}, values []interface{}) {
 	object := reflect.ValueOf(targetObject)
 
+	//if it is regular array, just use normal append
 	if isArrayOrSlice(targetObject) {
 		for _, val := range values {
 			valueReflected := reflect.ValueOf(val)
@@ -95,22 +109,10 @@ func setArrayValue(targetObject interface{}, values []interface{}) {
 
 		for _, val := range values {
 			valueReflected := reflect.ValueOf(val)
-
 			object.Set(reflect.Append(object, valueReflected))
 		}
 	}
 
-}
-
-func getElemType(a interface{}) reflect.Type {
-	for t := reflect.TypeOf(a); ; {
-		switch t.Kind() {
-		case reflect.Ptr, reflect.Slice:
-			t = t.Elem()
-		default:
-			return t
-		}
-	}
 }
 
 func isArrayOrSlice(object interface{}) bool {
@@ -123,16 +125,3 @@ func isArrayOrSlice(object interface{}) bool {
 		}
 	}
 }
-
-/*
-
-if open parenthesis
-	read each token
-		each colon(:)
-			before colon is name, after is value - value could be another object or array
-		break loop when closed brackets reached
-if open brackets
-	read each token
-		each: can be value, object or another array
-		add each item to corresponding array result
-*/
